@@ -16,8 +16,6 @@ class EditOrder extends EditRecord
 
     protected array $originalQuantities = [];
 
-    protected array $normalizedItems = [];
-
     protected ?string $originalStatus = null;
 
     protected function getHeaderActions(): array
@@ -27,7 +25,7 @@ class EditOrder extends EditRecord
         ];
     }
 
-    protected function mutateFormDataBeforeSave(array $data): array
+    protected function beforeSave(): void
     {
         $this->originalQuantities = $this->record->items()
             ->selectRaw('product_id, SUM(quantity) as quantity')
@@ -37,12 +35,17 @@ class EditOrder extends EditRecord
             ->map(fn ($quantity): int => (int) $quantity)
             ->all();
         $this->originalStatus = $this->record->status;
+    }
 
-        [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? []);
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? $this->data['items'] ?? []);
         static::validateStockAvailability($items, $this->originalQuantities);
 
-        $this->normalizedItems = $items;
-
+        $this->data['items'] = $items;
+        $this->data['subtotal'] = $subtotal;
+        $this->data['delivery_fee'] = (float) ($data['delivery_fee'] ?? 0);
+        $this->data['total'] = $subtotal + $this->data['delivery_fee'];
         $data['items'] = $items;
         $data['subtotal'] = $subtotal;
         $data['delivery_fee'] = (float) ($data['delivery_fee'] ?? 0);
@@ -54,14 +57,8 @@ class EditOrder extends EditRecord
     protected function afterSave(): void
     {
         $this->record->refresh();
-        $subtotal = $this->record->items()->sum('subtotal');
-
-        $this->record->update([
-            'subtotal' => $subtotal,
-            'total' => $subtotal + (float) $this->record->delivery_fee,
-        ]);
-
-        $this->record->syncItemsToStock($this->normalizedItems, $this->originalQuantities);
+        $this->record->recalculateTotals();
+        $this->record->syncSavedItemsToStock($this->originalQuantities);
     }
 
     protected static function normalizeOrderItems(array $items): array
@@ -84,6 +81,12 @@ class EditOrder extends EditRecord
                 'notes' => $item['notes'] ?? null,
             ];
         })->all();
+
+        if (blank($normalized) || collect($normalized)->every(fn (array $item): bool => blank($item['product_id'] ?? null))) {
+            throw ValidationException::withMessages([
+                'items' => 'Debes mantener al menos un producto valido en el pedido.',
+            ]);
+        }
 
         return [$subtotal, $normalized];
     }

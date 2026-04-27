@@ -72,6 +72,16 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    public function recalculateTotals(): void
+    {
+        $subtotal = (float) $this->items()->sum('subtotal');
+
+        $this->forceFill([
+            'subtotal' => round($subtotal, 2),
+            'total' => round($subtotal + (float) $this->delivery_fee, 2),
+        ])->saveQuietly();
+    }
+
     public function restoreItemsToStock(): void
     {
         if (! $this->stock_applied) {
@@ -146,7 +156,14 @@ class Order extends Model
 
     public function applySavedItemsToStock(): void
     {
-        $items = $this->items()
+        $items = $this->savedItemPayload();
+
+        $this->applyItemsToStock($items);
+    }
+
+    public function savedItemPayload(): array
+    {
+        return $this->items()
             ->whereNotNull('product_id')
             ->get(['product_id', 'quantity'])
             ->map(fn (OrderItem $item): array => [
@@ -154,8 +171,37 @@ class Order extends Model
                 'quantity' => $item->quantity,
             ])
             ->all();
+    }
 
-        $this->applyItemsToStock($items);
+    public function savedProductQuantities(): array
+    {
+        return $this->items()
+            ->whereNotNull('product_id')
+            ->selectRaw('product_id, SUM(quantity) as quantity')
+            ->groupBy('product_id')
+            ->pluck('quantity', 'product_id')
+            ->map(fn ($quantity): int => (int) $quantity)
+            ->all();
+    }
+
+    public function syncSavedItemsToStock(array $originalQuantities): void
+    {
+        if ($this->status === 'cancelled') {
+            $this->restoreItemsToStock();
+
+            return;
+        }
+
+        $newItems = $this->savedItemPayload();
+
+        if (! $this->stock_applied) {
+            $this->applyItemsToStock($newItems);
+
+            return;
+        }
+
+        $newQuantities = $this->savedProductQuantities();
+        $this->syncQuantitiesToStock($newQuantities, $originalQuantities);
     }
 
     public function syncItemsToStock(array $newItems, array $originalQuantities): void
@@ -178,6 +224,11 @@ class Order extends Model
             ->map(fn ($items): int => (int) collect($items)->sum('quantity'))
             ->all();
 
+        $this->syncQuantitiesToStock($newQuantities, $originalQuantities);
+    }
+
+    protected function syncQuantitiesToStock(array $newQuantities, array $originalQuantities): void
+    {
         $productIds = collect(array_keys($originalQuantities))
             ->merge(array_keys($newQuantities))
             ->unique();

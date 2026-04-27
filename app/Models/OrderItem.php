@@ -28,6 +28,17 @@ class OrderItem extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saved(function (OrderItem $item): void {
+            $item->order?->recalculateTotals();
+        });
+
+        static::deleted(function (OrderItem $item): void {
+            $item->order?->recalculateTotals();
+        });
+    }
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);

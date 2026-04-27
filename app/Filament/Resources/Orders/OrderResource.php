@@ -158,6 +158,22 @@ class OrderResource extends Resource
         return 'Bs ' . Number::format($subtotal + $deliveryFee, 2);
     }
 
+    protected static function normalizeRepeaterItemData(array $data): array
+    {
+        $product = isset($data['product_id']) ? Product::find($data['product_id']) : null;
+        $quantity = max(1, (int) ($data['quantity'] ?? 1));
+        $unitPrice = (float) ($data['unit_price'] ?? $product?->price ?? 0);
+
+        return [
+            ...$data,
+            'product_id' => $product?->id,
+            'product_name' => $product?->name ?? ($data['product_name'] ?? ''),
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'subtotal' => round($quantity * $unitPrice, 2),
+        ];
+    }
+
     protected static function productPreview(Get $get): HtmlString | string
     {
         $product = Product::find($get('product_id'));
@@ -301,6 +317,8 @@ class OrderResource extends Resource
                             ->relationship()
                             ->reorderable(false)
                             ->defaultItems(1)
+                            ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => static::normalizeRepeaterItemData($data))
+                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data): array => static::normalizeRepeaterItemData($data))
                             ->live()
                             ->afterStateUpdated(function (Get $get, Set $set): void {
                                 static::updateOrderTotals($get, $set);

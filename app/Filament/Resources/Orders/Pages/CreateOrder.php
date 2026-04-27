@@ -9,17 +9,16 @@ use App\Models\Product;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CreateOrder extends CreateRecord
 {
     protected static string $resource = OrderResource::class;
 
-    protected array $normalizedItems = [];
-
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['order_number'] = 'ORD-' . now()->format('YmdHis');
+        $data['order_number'] = static::generateOrderNumber();
         $data['user_id'] = Auth::id();
         $cashRegisterId = CashRegister::query()
             ->where('user_id', Auth::id())
@@ -41,11 +40,13 @@ class CreateOrder extends CreateRecord
 
         $data['cash_register_id'] = $cashRegisterId;
 
-        [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? []);
+        [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? $this->data['items'] ?? []);
         static::validateStockAvailability($items);
 
-        $this->normalizedItems = $items;
-
+        $this->data['items'] = $items;
+        $this->data['subtotal'] = $subtotal;
+        $this->data['delivery_fee'] = (float) ($data['delivery_fee'] ?? 0);
+        $this->data['total'] = $subtotal + $this->data['delivery_fee'];
         $data['items'] = $items;
         $data['subtotal'] = $subtotal;
         $data['delivery_fee'] = (float) ($data['delivery_fee'] ?? 0);
@@ -57,11 +58,13 @@ class CreateOrder extends CreateRecord
     protected function afterCreate(): void
     {
         $this->record->refresh();
-        $this->record->update([
-            'subtotal' => $this->record->items()->sum('subtotal'),
-            'total' => $this->record->items()->sum('subtotal') + (float) $this->record->delivery_fee,
-        ]);
+        $this->record->recalculateTotals();
         $this->record->applySavedItemsToStock();
+    }
+
+    protected static function generateOrderNumber(): string
+    {
+        return 'ORD-' . now()->format('YmdHisv') . '-' . Str::upper(Str::random(3));
     }
 
     protected static function normalizeOrderItems(array $items): array
@@ -84,6 +87,12 @@ class CreateOrder extends CreateRecord
                 'notes' => $item['notes'] ?? null,
             ];
         })->all();
+
+        if (blank($normalized) || collect($normalized)->every(fn (array $item): bool => blank($item['product_id'] ?? null))) {
+            throw ValidationException::withMessages([
+                'items' => 'Debes agregar al menos un producto valido al pedido.',
+            ]);
+        }
 
         return [$subtotal, $normalized];
     }

@@ -39,6 +39,7 @@ class CreateOrder extends CreateRecord
         }
 
         $data['cash_register_id'] = $cashRegisterId;
+        $data['payment_method'] = null;
 
         [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? $this->data['items'] ?? []);
         static::validateStockAvailability($items);

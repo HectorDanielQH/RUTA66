@@ -37,7 +37,7 @@ class SalesChart extends ChartWidget
         $sales = $days->map(function (Carbon $day): float {
             return (float) $this->ordersQuery()
                 ->whereDate('created_at', $day)
-                ->whereNotIn('status', ['cancelled'])
+                ->where('status', 'delivered')
                 ->sum('total');
         });
 

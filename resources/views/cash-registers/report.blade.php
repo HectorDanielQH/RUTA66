@@ -48,6 +48,13 @@
             text-transform: uppercase;
         }
 
+        .section-title {
+            margin: 0 0 8px;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
         .muted {
             color: #57534e;
         }
@@ -66,6 +73,53 @@
 
         .strong {
             font-weight: 800;
+        }
+
+        .summary-box {
+            border: 1px solid #d6d3d1;
+            border-radius: 8px;
+            background: #fafaf9;
+            padding: 8px;
+        }
+
+        .summary-box--result {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .summary-box--success {
+            background: #ecfdf5;
+            border-color: #86efac;
+        }
+
+        .summary-box--danger {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+
+        .summary-lead {
+            margin: 0 0 6px;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .pill--open {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .pill--closed {
+            background: #e5e7eb;
+            color: #111827;
         }
 
         .danger {
@@ -119,6 +173,19 @@
     </style>
 </head>
 <body>
+    @php
+        $openingAmount = (float) $cashRegister->opening_amount;
+        $cashSales = (float) $cashRegister->cash_sales_total;
+        $qrSales = (float) $cashRegister->qr_sales_total;
+        $expensesTotal = (float) $cashRegister->expenses_total;
+        $expectedClosing = (float) $cashRegister->expected_closing_amount;
+        $actualAmount = (float) $cashRegister->actual_amount;
+        $differenceAmount = (float) $cashRegister->difference_amount;
+        $salesTotal = (float) $cashRegister->sales_total;
+        $differenceLabel = $differenceAmount < 0 ? 'Faltante en caja' : ($differenceAmount > 0 ? 'Sobrante en caja' : 'Caja exacta');
+        $differenceClass = $differenceAmount < 0 ? 'danger' : 'success';
+        $resultBoxClass = $differenceAmount < 0 ? 'summary-box--danger' : 'summary-box--success';
+    @endphp
     <main class="report">
         <header class="center">
             <h1 class="brand">Ruta 66</h1>
@@ -129,6 +196,7 @@
         <div class="divider"></div>
 
         <section>
+            <p class="section-title">Resumen del turno</p>
             <div class="row">
                 <strong>Atendido por</strong>
                 <span>{{ $cashRegister->user?->getFilamentName() ?: $cashRegister->user?->username ?: 'Sin usuario' }}</span>
@@ -143,59 +211,90 @@
             </div>
             <div class="row">
                 <strong>Estado</strong>
-                <span>{{ $cashRegister->status === 'open' ? 'Abierta' : 'Cerrada' }}</span>
+                <span class="pill {{ $cashRegister->status === 'open' ? 'pill--open' : 'pill--closed' }}">
+                    {{ $cashRegister->status === 'open' ? 'Caja abierta' : 'Caja cerrada' }}
+                </span>
             </div>
         </section>
 
         <div class="divider"></div>
 
         <section>
-            <div class="row">
-                <span>Efectivo inicial</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format((float) $cashRegister->opening_amount, 2) }}</strong>
+            <p class="section-title">Dinero del turno</p>
+
+            <div class="summary-box">
+                <p class="summary-lead strong">1. Dinero que entro durante el turno</p>
+                <div class="row">
+                    <span>Efectivo con el que se abrio la caja</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($openingAmount, 2) }}</strong>
+                </div>
+                <div class="row">
+                    <span>Ventas cobradas en efectivo</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($cashSales, 2) }}</strong>
+                </div>
+                <div class="row">
+                    <span>Ventas cobradas por QR</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($qrSales, 2) }}</strong>
+                </div>
+                <div class="row strong">
+                    <span>Total cobrado del turno</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($salesTotal, 2) }}</strong>
+                </div>
+                <div class="muted">Este total incluye efectivo y QR.</div>
             </div>
-            <div class="row">
-                <span>Ventas efectivo</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->cash_sales_total, 2) }}</strong>
-            </div>
-            <div class="row">
-                <span>QR</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->qr_sales_total, 2) }}</strong>
-            </div>
-            <div class="row">
-                <span>Tarjeta</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->card_sales_total, 2) }}</strong>
-            </div>
-            <div class="row">
-                <span>Transferencia</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->transfer_sales_total, 2) }}</strong>
-            </div>
+
             <div class="divider"></div>
-            <div class="row strong">
-                <span>Total cobrado</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->sales_total, 2) }}</strong>
+
+            <div class="summary-box">
+                <p class="summary-lead strong">2. Dinero que salio durante el turno</p>
+                <div class="row">
+                    <span>Egresos registrados</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($expensesTotal, 2) }}</strong>
+                </div>
+                <div class="muted">Aqui se reflejan compras, pagos o retiros registrados en la caja.</div>
             </div>
-            <div class="muted">Incluye efectivo, QR, tarjeta y transferencia.</div>
-            <div class="row strong">
-                <span>Efectivo esperado</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format($cashRegister->expected_closing_amount, 2) }}</strong>
+
+            <div class="divider"></div>
+
+            <div class="summary-box summary-box--result">
+                <p class="summary-lead strong">3. Lo que deberia haber al cerrar</p>
+                <div class="row">
+                    <span>Efectivo esperado en caja</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($expectedClosing, 2) }}</strong>
+                </div>
+                <div class="muted">Calculo: efectivo inicial + ventas en efectivo - egresos.</div>
             </div>
-            <div class="muted">Solo efectivo: inicial + ventas en efectivo.</div>
-            <div class="row">
-                <span>Efectivo contado</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format((float) $cashRegister->actual_amount, 2) }}</strong>
-            </div>
-            <div class="row strong {{ (float) $cashRegister->difference_amount < 0 ? 'danger' : 'success' }}">
-                <span>Diferencia</span>
-                <strong>Bs {{ \Illuminate\Support\Number::format((float) $cashRegister->difference_amount, 2) }}</strong>
+
+            <div class="divider"></div>
+
+            <div class="summary-box {{ $resultBoxClass }}">
+                <p class="summary-lead strong">4. Lo que realmente se conto</p>
+                <div class="row">
+                    <span>Dinero contado fisicamente</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($actualAmount, 2) }}</strong>
+                </div>
+                <div class="row strong {{ $differenceClass }}">
+                    <span>{{ $differenceLabel }}</span>
+                    <strong>Bs {{ \Illuminate\Support\Number::format($differenceAmount, 2) }}</strong>
+                </div>
+                <div class="muted">
+                    @if ($differenceAmount < 0)
+                        Falta dinero respecto a lo que el sistema esperaba.
+                    @elseif ($differenceAmount > 0)
+                        Sobro dinero respecto a lo que el sistema esperaba.
+                    @else
+                        El conteo coincide exactamente con lo esperado.
+                    @endif
+                </div>
             </div>
         </section>
 
         <div class="divider"></div>
 
         <section>
+            <p class="section-title">Detalle de pedidos</p>
             <div class="row strong">
-                <span>Pedidos</span>
+                <span>Total de pedidos del turno</span>
                 <span>{{ $cashRegister->orders_count }}</span>
             </div>
             <div class="row">
@@ -214,7 +313,7 @@
                     <div class="muted">
                         {{ $order->created_at?->format('H:i') }}
                         - {{ $order->customer?->name ?? 'Sin cliente' }}
-                        - {{ ['cash' => 'Efectivo', 'qr' => 'QR', 'card' => 'Tarjeta', 'transfer' => 'Transferencia'][$order->payment_method] ?? $order->payment_method }}
+                        - {{ $order->payment_method ? (['cash' => 'Efectivo', 'qr' => 'QR'][$order->payment_method] ?? $order->payment_method) : 'Sin cobrar' }}
                         - {{ $order->status === 'cancelled' ? 'Cancelado' : 'Valido' }}
                     </div>
                 </div>
@@ -223,9 +322,40 @@
             @endforelse
         </section>
 
+        <div class="divider"></div>
+
+        <section>
+            <p class="section-title">Detalle de egresos</p>
+            <div class="row strong">
+                <span>Egresos del turno</span>
+                <span>{{ $cashRegister->expenses->count() }}</span>
+            </div>
+
+            <div class="divider"></div>
+
+            @forelse ($cashRegister->expenses as $expense)
+                <div class="order">
+                    <div class="row">
+                        <strong>{{ $expense->concept }}</strong>
+                        <strong>Bs {{ \Illuminate\Support\Number::format((float) $expense->amount, 2) }}</strong>
+                    </div>
+                    <div class="muted">
+                        {{ $expense->spent_at?->format('H:i') }}
+                        - {{ $expense->user?->getFilamentName() ?: $expense->user?->username ?: 'Sin usuario' }}
+                        @if ($expense->notes)
+                            - {{ $expense->notes }}
+                        @endif
+                    </div>
+                </div>
+            @empty
+                <p class="muted center">No hay egresos registrados en este turno.</p>
+            @endforelse
+        </section>
+
         @if ($cashRegister->opening_notes || $cashRegister->closing_notes)
             <div class="divider"></div>
             <section>
+                <p class="section-title">Observaciones</p>
                 @if ($cashRegister->opening_notes)
                     <div><strong>Nota inicial:</strong> {{ $cashRegister->opening_notes }}</div>
                 @endif

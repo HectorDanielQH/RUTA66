@@ -69,7 +69,7 @@ class SalesReports extends Page
     public function getSummary(): array
     {
         $orders = $this->baseOrdersQuery();
-        $validOrders = (clone $orders)->where('status', '!=', 'cancelled');
+        $validOrders = (clone $orders)->where('status', 'delivered');
 
         $ordersCount = (clone $orders)->count();
         $cancelledCount = (clone $orders)->where('status', 'cancelled')->count();
@@ -88,7 +88,7 @@ class SalesReports extends Page
     public function getEmployeeSales(): Collection
     {
         return $this->baseOrdersQuery()
-            ->where('status', '!=', 'cancelled')
+            ->where('status', 'delivered')
             ->select('user_id', DB::raw('COUNT(*) as orders_count'), DB::raw('SUM(total) as total_sales'))
             ->with('user')
             ->groupBy('user_id')
@@ -99,7 +99,7 @@ class SalesReports extends Page
     public function getProductSales(): Collection
     {
         $orderIds = $this->baseOrdersQuery()
-            ->where('status', '!=', 'cancelled')
+            ->where('status', 'delivered')
             ->pluck('id');
 
         if ($orderIds->isEmpty()) {

@@ -38,11 +38,11 @@ class RestaurantStatsOverview extends StatsOverviewWidget
 
         $todaySales = $this->ordersQuery()
             ->whereDate('created_at', today())
-            ->whereNotIn('status', ['cancelled'])
+            ->where('status', 'delivered')
             ->sum('total');
 
         $pendingOrders = $this->ordersQuery()
-            ->whereIn('status', ['pending', 'confirmed', 'preparing'])
+            ->where('status', 'preparing')
             ->count();
 
         $availableProducts = Product::query()
@@ -59,7 +59,7 @@ class RestaurantStatsOverview extends StatsOverviewWidget
                 ->color('success')
                 ->icon('heroicon-o-banknotes'),
             Stat::make('Pedidos activos', $pendingOrders)
-                ->description('Pendientes, confirmados o en preparacion')
+                ->description('Actualmente en preparacion')
                 ->color('warning')
                 ->icon('heroicon-o-clock'),
             Stat::make('Productos disponibles', $availableProducts)

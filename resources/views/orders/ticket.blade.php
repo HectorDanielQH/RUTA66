@@ -167,7 +167,7 @@
             </div>
             <div class="row">
                 <strong>Pago</strong>
-                <span>{{ ['cash' => 'Efectivo', 'qr' => 'QR', 'card' => 'Tarjeta', 'transfer' => 'Transferencia'][$order->payment_method] ?? $order->payment_method }}</span>
+                <span>{{ $order->payment_method ? (['cash' => 'Efectivo', 'qr' => 'QR'][$order->payment_method] ?? $order->payment_method) : 'Pendiente de cobro' }}</span>
             </div>
             @if ($order->order_type === 'delivery')
                 <div><strong>Zona:</strong> {{ $order->deliveryZone?->name ?? 'Sin zona' }}</div>

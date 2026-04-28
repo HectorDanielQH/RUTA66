@@ -46,9 +46,14 @@ class CashRegister extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(CashExpense::class);
+    }
+
     public function validOrders(): HasMany
     {
-        return $this->orders()->where('status', '!=', 'cancelled');
+        return $this->orders()->where('status', 'delivered');
     }
 
     public function getSalesTotalAttribute(): float
@@ -66,19 +71,14 @@ class CashRegister extends Model
         return (float) $this->validOrders()->where('payment_method', 'qr')->sum('total');
     }
 
-    public function getCardSalesTotalAttribute(): float
-    {
-        return (float) $this->validOrders()->where('payment_method', 'card')->sum('total');
-    }
-
-    public function getTransferSalesTotalAttribute(): float
-    {
-        return (float) $this->validOrders()->where('payment_method', 'transfer')->sum('total');
-    }
-
     public function getOrdersCountAttribute(): int
     {
         return $this->orders()->count();
+    }
+
+    public function getExpensesTotalAttribute(): float
+    {
+        return (float) $this->expenses()->sum('amount');
     }
 
     public function getCancelledOrdersCountAttribute(): int
@@ -88,6 +88,6 @@ class CashRegister extends Model
 
     public function getExpectedClosingAmountAttribute(): float
     {
-        return (float) $this->opening_amount + $this->cash_sales_total;
+        return (float) $this->opening_amount + $this->cash_sales_total - $this->expenses_total;
     }
 }

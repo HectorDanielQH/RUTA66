@@ -42,6 +42,10 @@ class EditOrder extends EditRecord
         [$subtotal, $items] = static::normalizeOrderItems($data['items'] ?? $this->data['items'] ?? []);
         static::validateStockAvailability($items, $this->originalQuantities);
 
+        $status = $data['status'] ?? $this->record->status;
+        $data['payment_method'] = $status === 'delivered'
+            ? $this->record->payment_method
+            : null;
         $this->data['items'] = $items;
         $this->data['subtotal'] = $subtotal;
         $this->data['delivery_fee'] = (float) ($data['delivery_fee'] ?? 0);

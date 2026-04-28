@@ -18,6 +18,7 @@ class CashRegisterReportController extends Controller
 
         $cashRegister->load([
             'user',
+            'expenses.user',
             'orders' => fn ($query) => $query->with('customer')->latest(),
         ]);
 

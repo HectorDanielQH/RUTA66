@@ -70,11 +70,7 @@ class OrderResource extends Resource
     protected static function orderStatusOptions(): array
     {
         return [
-            'pending' => 'Pendiente',
-            'confirmed' => 'Confirmado',
             'preparing' => 'En preparacion',
-            'ready' => 'Listo',
-            'on_the_way' => 'En camino',
             'delivered' => 'Entregado',
             'cancelled' => 'Cancelado',
         ];
@@ -94,19 +90,20 @@ class OrderResource extends Resource
         return [
             'cash' => 'Efectivo',
             'qr' => 'QR',
-            'card' => 'Tarjeta',
-            'transfer' => 'Transferencia',
         ];
+    }
+
+    protected static function paymentMethodLabel(?string $state): string
+    {
+        return filled($state)
+            ? (static::paymentMethodOptions()[$state] ?? (string) $state)
+            : 'Sin cobrar';
     }
 
     protected static function statusColor(string $status): string
     {
         return match ($status) {
-            'pending' => 'gray',
-            'confirmed' => 'info',
             'preparing' => 'warning',
-            'ready' => 'primary',
-            'on_the_way' => 'danger',
             'delivered' => 'success',
             'cancelled' => 'danger',
             default => 'gray',
@@ -253,14 +250,8 @@ class OrderResource extends Resource
                         Select::make('status')
                             ->label('Estado')
                             ->options(static::orderStatusOptions())
-                            ->default('pending')
+                            ->default('preparing')
                             ->required(),
-                        Select::make('payment_method')
-                            ->label('Forma de pago')
-                            ->options(static::paymentMethodOptions())
-                            ->default('cash')
-                            ->required()
-                            ->helperText('Si no es efectivo, no se contara como dinero fisico en caja.'),
                         Select::make('delivery_zone_id')
                             ->label('Zona de delivery')
                             ->options(fn (): array => DeliveryZone::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all())
@@ -473,14 +464,12 @@ class OrderResource extends Resource
                 TextColumn::make('payment_method')
                     ->label('Pago')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn (?string $state): string => match ($state) {
                         'cash' => 'success',
                         'qr' => 'info',
-                        'card' => 'warning',
-                        'transfer' => 'gray',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn (string $state): string => static::paymentMethodOptions()[$state] ?? $state),
+                    ->formatStateUsing(fn (?string $state): string => static::paymentMethodLabel($state)),
                 TextColumn::make('total')
                     ->label('Total')
                     ->formatStateUsing(fn ($state): string => 'Bs ' . Number::format((float) $state, 2))
@@ -515,36 +504,32 @@ class OrderResource extends Resource
             ])
             ->defaultSort('created_at', 'desc')
             ->recordActions([
-                Action::make('confirm')
-                    ->label('Confirmar')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('info')
-                    ->visible(fn (Order $record): bool => $record->status === 'pending')
-                    ->action(fn (Order $record): bool => $record->update(['status' => 'confirmed'])),
                 Action::make('prepare')
-                    ->label('Preparar')
+                    ->label('En preparacion')
                     ->icon('heroicon-o-fire')
                     ->color('warning')
-                    ->visible(fn (Order $record): bool => in_array($record->status, ['pending', 'confirmed'], true))
-                    ->action(fn (Order $record): bool => $record->update(['status' => 'preparing'])),
-                Action::make('ready')
-                    ->label('Listo')
-                    ->icon('heroicon-o-hand-thumb-up')
-                    ->color('primary')
-                    ->visible(fn (Order $record): bool => $record->status === 'preparing')
-                    ->action(fn (Order $record): bool => $record->update(['status' => 'ready'])),
-                Action::make('dispatch')
-                    ->label('En camino')
-                    ->icon('heroicon-o-truck')
-                    ->color('danger')
-                    ->visible(fn (Order $record): bool => $record->order_type === 'delivery' && $record->status === 'ready')
-                    ->action(fn (Order $record): bool => $record->update(['status' => 'on_the_way'])),
+                    ->visible(fn (Order $record): bool => ! in_array($record->status, ['preparing', 'delivered', 'cancelled'], true))
+                    ->action(fn (Order $record): bool => $record->update([
+                        'status' => 'preparing',
+                        'payment_method' => null,
+                    ])),
                 Action::make('deliver')
-                    ->label('Entregar')
+                    ->label('Cobrar y entregar')
                     ->icon('heroicon-o-check-badge')
                     ->color('success')
-                    ->visible(fn (Order $record): bool => in_array($record->status, ['ready', 'on_the_way'], true))
-                    ->action(fn (Order $record): bool => $record->update(['status' => 'delivered'])),
+                    ->visible(fn (Order $record): bool => $record->status === 'preparing')
+                    ->form([
+                        Select::make('payment_method')
+                            ->label('Forma de pago')
+                            ->options(static::paymentMethodOptions())
+                            ->required(),
+                    ])
+                    ->action(function (Order $record, array $data): bool {
+                        return $record->update([
+                            'status' => 'delivered',
+                            'payment_method' => $data['payment_method'],
+                        ]);
+                    }),
                 Action::make('printTicket')
                     ->label('Imprimir ticket')
                     ->icon('heroicon-o-printer')
@@ -558,7 +543,10 @@ class OrderResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (Order $record): bool => ! in_array($record->status, ['delivered', 'cancelled'], true))
                     ->action(function (Order $record): bool {
-                        $updated = $record->update(['status' => 'cancelled']);
+                        $updated = $record->update([
+                            'status' => 'cancelled',
+                            'payment_method' => null,
+                        ]);
                         $record->restoreItemsToStock();
 
                         return $updated;
